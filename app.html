@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Book Search</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        
+        .search-form {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        input, select {
+            margin: 5px;
+            padding: 5px;
+        }
+        
+        button {
+            padding: 5px 10px;
+            margin: 5px;
+        }
+        
+        .book {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        
+        .error {
+            color: red;
+        }
+        
+        .loading {
+            color: blue;
+        }
+        
+        table {
+            width: 100%;
+        }
+        
+        td {
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Project Gutenberg Book Search</h1>
+    
+    <div class="search-form">
+        <h2>Search Books</h2>
+        <form id="searchForm">
+            <table>
+                <tr>
+                    <td>Book ID:</td>
+                    <td><input type="text" id="bookId" placeholder="Enter book ID"></td>
+                </tr>
+                <tr>
+                    <td>Title:</td>
+                    <td><input type="text" id="title" placeholder="Enter title"></td>
+                </tr>
+                <tr>
+                    <td>Author:</td>
+                    <td><input type="text" id="author" placeholder="Enter author name"></td>
+                </tr>
+                <tr>
+                    <td>Language:</td>
+                    <td>
+                        <select id="language">
+                            <option value="">All</option>
+                            <option value="en">English</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="es">Spanish</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Topic:</td>
+                    <td><input type="text" id="topic" placeholder="Enter topic"></td>
+                </tr>
+            </table>
+            <button type="submit">Search</button>
+            <button type="button" onclick="clearForm()">Clear</button>
+        </form>
+    </div>
+    
+    <div id="loading" class="loading" style="display: none;">Loading...</div>
+    <div id="error" class="error"></div>
+    
+    <div id="results">
+        <h2>Results</h2>
+        <p id="resultCount"></p>
+        <div id="booksList"></div>
+        <div id="pagination"></div>
+    </div>
+    
+    <script>
+        // API URL
+        const API_URL = 'http://localhost:5000/api/v1';
+        let currentPage = 1;
+        
+        // Search form submit
+        document.getElementById('searchForm').onsubmit = function(e) {
+            e.preventDefault();
+            currentPage = 1;
+            searchBooks();
+        };
+        
+        // Search books function
+        function searchBooks() {
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').innerHTML = '';
+            
+            // Get form values
+            const bookId = document.getElementById('bookId').value;
+            const title = document.getElementById('title').value;
+            const author = document.getElementById('author').value;
+            const language = document.getElementById('language').value;
+            const topic = document.getElementById('topic').value;
+            
+            // Build URL
+            let url = API_URL + '/books?page=' + currentPage;
+            if (bookId) url += '&id=' + bookId;
+            if (title) url += '&title=' + title;
+            if (author) url += '&author=' + author;
+            if (language) url += '&language=' + language;
+            if (topic) url += '&topic=' + topic;
+            
+            // Fetch data
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    displayResults(data);
+                    document.getElementById('loading').style.display = 'none';
+                })
+                .catch(error => {
+                    document.getElementById('error').innerHTML = 'Error: ' + error.message;
+                    document.getElementById('loading').style.display = 'none';
+                });
+        }
+        
+        // Display results
+        function displayResults(data) {
+            // Show count
+            document.getElementById('resultCount').innerHTML = 'Found ' + data.count + ' books';
+            
+            // Show books
+            let html = '';
+            data.books.forEach(book => {
+                html += '<div class="book">';
+                html += '<h3>' + (book.title || 'No Title') + '</h3>';
+                html += '<p><strong>ID:</strong> ' + book.id + '</p>';
+                
+                // Authors
+                if (book.authors && book.authors.length > 0) {
+                    html += '<p><strong>Authors:</strong> ';
+                    book.authors.forEach(author => {
+                        html += author.name;
+                        if (author.birth_year) {
+                            html += ' (' + author.birth_year + '-' + (author.death_year || '') + ')';
+                        }
+                        html += ', ';
+                    });
+                    html = html.slice(0, -2); // Remove last comma
+                    html += '</p>';
+                }
+                
+                // Languages
+                if (book.languages && book.languages.length > 0) {
+                    html += '<p><strong>Languages:</strong> ' + book.languages.join(', ') + '</p>';
+                }
+                
+                // Subjects
+                if (book.subjects && book.subjects.length > 0) {
+                    html += '<p><strong>Subjects:</strong> ' + book.subjects.join(', ') + '</p>';
+                }
+                
+                // Bookshelves
+                if (book.bookshelves && book.bookshelves.length > 0) {
+                    html += '<p><strong>Bookshelves:</strong> ' + book.bookshelves.join(', ') + '</p>';
+                }
+                
+                // Download links
+                if (book.download_links) {
+                    html += '<p><strong>Download:</strong> ';
+                    for (let format in book.download_links) {
+                        html += '<a href="' + book.download_links[format] + '" target="_blank">' + format + '</a> | ';
+                    }
+                    html = html.slice(0, -3); // Remove last separator
+                    html += '</p>';
+                }
+                
+                html += '</div>';
+            });
+            
+            document.getElementById('booksList').innerHTML = html;
+            
+            // Show pagination
+            let pageHtml = '';
+            if (currentPage > 1) {
+                pageHtml += '<button onclick="goToPage(' + (currentPage - 1) + ')">Previous</button>';
+            }
+            pageHtml += ' Page ' + currentPage + ' of ' + data.total_pages + ' ';
+            if (currentPage < data.total_pages) {
+                pageHtml += '<button onclick="goToPage(' + (currentPage + 1) + ')">Next</button>';
+            }
+            
+            document.getElementById('pagination').innerHTML = pageHtml;
+        }
+        
+        // Go to page
+        function goToPage(page) {
+            currentPage = page;
+            searchBooks();
+        }
+        
+        // Clear form
+        function clearForm() {
+            document.getElementById('searchForm').reset();
+            document.getElementById('booksList').innerHTML = '';
+            document.getElementById('resultCount').innerHTML = '';
+            document.getElementById('pagination').innerHTML = '';
+        }
+        
+        // Load all books on page load
+        window.onload = function() {
+            searchBooks();
+        };
+    </script>
+</body>
+</html>
